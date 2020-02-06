@@ -1,7 +1,7 @@
 #!/bin/bash
 
 version="v1.1"
-name="patente-pendiente"
+name="testseg"
 modificado="13/11/2019"
 
 # =========================================================== #
@@ -24,18 +24,33 @@ modificado="13/11/2019"
 #                    Comienzo del script                      #
 # =========================================================== #
 
+## Cambios 
+# comence a cambiar la forma en que paso el target, va a quedar como parametro de un switch seguro
+# corregi bug importamte del parseador de gnamp, que eliminaba ips con puertos filtrados y abiertos a la vez, ademas mostraba puertos que figuraban como cerrados
+# harcodee puertos para las pruebas de arcos, pero estaria bueno agregar un switch para pasarlos por parametro
+
+
 ## Variables
 fecha="$(date +"%d/%m/%Y")"
 hora="$(date +"%H:%M:%S")"
 fecha_log="$(date +"%d%m%Y")"
 hora_log="$(date +"%H%M")"
 
+## solo para arcos
+ports="7,9,13,17,19,21,22,23,80,135,139,445,515,1025,1026,1027,1801,2000,2103,2105,2107,2701,3389,3390,5001,5002,5003,5004,5005,5006,5007,5060,5504,5800,5900,8081,8089,8500"
+#########################
+
 ## parametros de entrada
-input="${!#}"
+input="${!#}" 
 param_1="$1"
 param_2="$2"
+param_3="$3"
 
-## archivos de outputs
+## archivos de log
+client=""  #ver como lo obtengo del comando // usar switch -c para pasar cliente // usar switch -t para pasar el target // capaz asi quede, pero cambia muchas cosas, hay que redifinir por completo como recibo parametros 
+path_log="$(pwd)/$client/logs"
+path_report="$(pwd)/$client"
+
 icmp_log="icmp-$hora_log"_"$fecha_log.log"
 
 tcp_grep_100="tcp_100-$hora_log"_"$fecha_log.gnmap"
@@ -53,6 +68,23 @@ udp_grep_all="udp_all-$hora_log"_"$fecha_log.gnmap"
 udp_log_100="udp_100-$hora_log"_"$fecha_log.log"
 udp_log_1000="udp_1000-$hora_log"_"$fecha_log.log"
 udp_log_all="udp_all-$hora_log"_"$fecha_log.log"
+
+
+## logs
+function make_directory(){
+	if [ -d "$path_report" ]; then
+		echo "true"
+	else 
+		mkdir "$path_report"
+	fi
+
+	if [ -d "$path_log" ]; then
+		echo "true"
+	else 
+		mkdir "$path_log"
+	fi
+}
+
 
 ## temporales
 filt_tmp="filt.tmp"
@@ -114,7 +146,7 @@ function banner_inicio (){
 
 function banner_fail (){
 	echo -e "
-$C$b  Analisis completo:$W $fecha a las $hora
+ $C$b Analisis completo:$W $fecha a las $hora
  $W
   +───────────────────────────────────+
   │                                   │
@@ -126,7 +158,7 @@ $C$b  Analisis completo:$W $fecha a las $hora
 
 function banner_pass(){
 	echo -e "
-$C$b  Analisis completo:$W $fecha a las $hora
+ $C$b Analisis completo:$W $fecha a las $hora
  $W
   +───────────────────────────────────+
   │                                   │
@@ -139,10 +171,10 @@ $C$b  Analisis completo:$W $fecha a las $hora
 function help_menu (){
 	banner
 	echo -e "$b
-  $name en una herramienta que automatiza la ejecucion de los analisis de segmentacion.
+  $name es una herramienta que automatiza la ejecucion de los analisis de segmentacion.
   
  "$S$C"Opciones$S2:
-$NF$W
+  $NF$W
 	$b-icmp$NF$W	Realiza el analisis basado en protocolo ICMP.
 	$b-tcp$NF$W	Realiza el analisis basado en protocolo TCP, utilizar con parametros F, N y all.
 	$b-udp$NF$W	Realiza el analisis basado en protocolo UDP, utilizar con parametros F, N y all..
@@ -150,15 +182,15 @@ $NF$W
 	"$b"F$NF$W	Se realizan las pruebas sobre 100 puertos comunes.
 	"$b"N$NF$W	Se realizan las pruebas sobre 1000 puertos comunes.
 	"$b"all$NF$W	Se realizan las pruebas sobre los 65535 puertos.
-$b
+  $b
   "$S$C"Modo de uso$S2:
-$b$W
+  $b$W
 	$name -icmp alcance.txt
 	$name -tcp F alcance.txt
 	$name -tcp N alcance.txt
 	$name -udp alcance.txt
 	$name -udp all alcance.txt
-$NF"
+  $NF"
 }
 
 
@@ -212,43 +244,11 @@ function test_ping () {
 	cleanup
 }
 
-
-## Escaneos Nmap tcp
-function scan_nmap_tcp (){
-	translate_red
-	IPs=$(cat $list_tmp)
-	if [ "$param_2" == "F" ]; then
-		sudo nmap -vv -n -sS -Pn --disable-arp-ping -T4 -F -oG "$tcp_grep_100" $IPs | tee "$tcp_log_100" | grep "Timing"
-	elif [ "$param_2" == "N" ]; then
-		sudo nmap -vv -n -sS -Pn --disable-arp-ping -T4 -oG "$tcp_grep_1000" $IPs | tee "$tcp_log_1000" | grep "Timing"
-	elif [ "$param_2" == "all" ]; then
-		sudo nmap -vv -n -sS -Pn --disable-arp-ping -T4 -p 1-65535 -oG "$tcp_grep_all" $IPs | tee "$tcp_log_all" | grep "Timing"
-	elif [ "$param_2" == "$input" ]; then 
-		sudo nmap -vv -n -sS -Pn --disable-arp-ping -T4 -oG "$tcp_grep_1000" $IPs | tee "$tcp_log_1000" | grep "Timing"
-	fi
-	cleanup
-}
-
-## Escaneos Nmap udp
-function scan_nmap_udp (){
-	translate_red
-	IPs=$(cat $list_tmp)
-	if [ "$param_2" == "F" ]; then
-		sudo nmap -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -F -oG "$udp_grep_100" $IPs | tee "$udp_log_100" | grep "Timing"
-	elif [ "$param_2" == "N" ]; then
-		sudo nmap -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -oG "$udp_grep_1000" $IPs | tee "$udp_log_1000" | grep "Timing"
-	elif [ "$param_2" == "all" ]; then
-		sudo nmap -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -p 1-65535 -oG "$udp_grep_all" $IPs | tee "$udp_log_all" | grep "Timing"
-	elif [ "$param_2" == "$input" ]; then
-		sudo nmap -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -oG "$udp_grep_1000" $IPs | tee "$udp_log_1000" | grep "Timing"
-	fi
-	cleanup
-}
-
-
 # Detecta fails en archivos .gnmap
 function nmap_parser (){	
-	grep "Host" $scan | grep -v "filtered/.../" | cut -d' ' -f2,4- | sed -n -e 's/Ignored.*//p' |
+ #	grep "Host" $scan | grep -v "filtered/.../" | cut -d' ' -f2,4- | sed -n -e 's/Ignored.*//p' |
+ #	grep "Host" $scan | cut -d' ' -f2,4- | sed -n -e 's/Ignored.*//p' |
+	grep "Host" $scan | grep -v "Up" | cut -d' ' -f2,4- |
 	awk '{printf "\n\033[1m    \033[31m✘ \033[39m %-14s RESPONDE \033[31m➔\033[39m %-14s", $1," Total de puertos: " NF-1 "\n"
 		$1=""
 		for(i=2; i<=NF; i++) { a=a" "$i; }
@@ -308,10 +308,8 @@ function report_tcp (){
 		fi
 	else 
 		echo -e "\n$b$R  [-]$W Parametro no valido$R(╯\`o\`)╯$W︵ ┻━┻ \n"
-		exit
 	fi
 }
-
 
 function report_udp (){
 	if [ "$param_2" == "F" ]; then
@@ -364,8 +362,40 @@ function report_udp (){
 		fi
 	else
 		echo -e "\n$b$R  [-]$W Parametro no valido$R(╯\`o\`)╯$W︵ ┻━┻ \n"
-		exit
 	fi 
+}
+
+
+## Escaneos Nmap tcp
+function scan_nmap_tcp (){
+	translate_red
+	IPs=$(cat $list_tmp)
+	if [ "$param_2" == "F" ]; then
+		sudo nmap --open -vv -n -sS -Pn --disable-arp-ping -T4 -F -oG "$tcp_grep_100" $IPs | tee "$tcp_log_100" | grep "Timing"
+	elif [ "$param_2" == "N" ]; then
+		sudo nmap --open -vv -n -sS -Pn --disable-arp-ping -T4 -oG "$tcp_grep_1000" $IPs | tee "$tcp_log_1000" | grep "Timing"
+	elif [ "$param_2" == "all" ]; then
+		sudo nmap --open -vv -n -sS -Pn --disable-arp-ping -T4 -p 1-65535 -oG "$tcp_grep_all" $IPs | tee "$tcp_log_all" | grep "Timing"
+	elif [ "$param_2" == "$input" ]; then 
+		sudo nmap --open -vv -n -sS -Pn -p"$ports" --disable-arp-ping -T4 -oG "$tcp_grep_1000" $IPs | tee "$tcp_log_1000" | grep "Timing"
+	fi
+	cleanup
+}
+
+## Escaneos Nmap udp
+function scan_nmap_udp (){
+	translate_red
+	IPs=$(cat $list_tmp)
+	if [ "$param_2" == "F" ]; then
+		sudo nmap --open  -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -F -oG "$udp_grep_100" $IPs | tee "$udp_log_100" | grep "Timing"
+	elif [ "$param_2" == "N" ]; then
+		sudo nmap --open  -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -oG "$udp_grep_1000" $IPs | tee "$udp_log_1000" | grep "Timing"
+	elif [ "$param_2" == "all" ]; then
+		sudo nmap --open  -vv -n -sU -Pn --disable-arp-ping --host-timeout 1m  -T4 -p 1-65535 -oG "$udp_grep_all" $IPs | tee "$udp_log_all" | grep "Timing"
+	elif [ "$param_2" == "$input" ]; then
+		sudo nmap --open  -vv -n -sU -Pn -p"$ports" --disable-arp-ping --host-timeout 1m  -T4 -oG "$udp_grep_1000" $IPs | tee "$udp_log_1000" | grep "Timing"
+	fi
+	cleanup
 }
 
 
@@ -376,20 +406,20 @@ function switch_selector (){
 			--help) help_menu ;;
 			-h) help_menu ;;
 			-icmp)
-				console_log="icmp-resultados-$hora_log"_"$fecha_log.log"
-				banner | tee -a $console_log
-				banner_inicio | tee -a $console_log
-				test_ping | tee -a $console_log
+				console_report="icmp-resultados-$hora_log"_"$fecha_log.log"
+				banner | tee -a $console_report
+				banner_inicio | tee -a $console_report
+				test_ping | tee -a $console_report
 				shift
 				;;
 			-tcp)
-				console_log="tcp-resultados-$hora_log"_"$fecha_log.log"
-				report_tcp "$param_2" | tee -a $console_log
+				console_report="tcp-resultados-$hora_log"_"$fecha_log.log"
+				report_tcp "$param_2" | tee -a $console_report
 				shift
 				;;
 			-udp)
-				console_log="udp-resultados-$hora_log"_"$fecha_log.log"
-				report_udp "$param_2" | tee -a $console_log
+				console_report="udp-resultados-$hora_log"_"$fecha_log.log"
+				report_udp "$param_2" | tee -a $console_report
 				shift
 				;;	
 			-*)
