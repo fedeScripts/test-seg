@@ -5,7 +5,7 @@ name="testseg"
 modificado="13/11/2019"
 
 # =========================================================== #
-#          INSSIDE LAB - ANALISIS DE SEGMENTACION             #
+#                  ANALISIS DE SEGMENTACION                   #
 # =========================================================== #
 #                                                             #
 # Este script surge de la necesidad de realizar los analisis  #
